@@ -25,6 +25,10 @@ body{font-family:var(--sans);background:var(--bg);color:var(--text);min-height:1
 .btn-outline:hover{background:var(--surface2)}
 .btn-danger{background:var(--red-light);border-color:#fca5a5;color:var(--red)}
 .btn-sm{font-size:12px;padding:5px 10px}
+.tab-bar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:0 28px;position:sticky;top:56px;z-index:99;box-shadow:var(--shadow)}
+.tab-btn{font-family:var(--sans);font-size:13px;font-weight:500;padding:13px 20px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .15s}
+.tab-btn:hover{color:var(--text)}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
 .main{max-width:1320px;margin:0 auto;padding:32px 24px 64px}
 .drop-section{background:var(--surface);border:2px dashed var(--border-strong);border-radius:12px;padding:40px 32px;text-align:center;transition:all .2s;margin-bottom:32px}
 .drop-section.drag-over{border-color:var(--accent);background:var(--accent-light)}
@@ -132,7 +136,6 @@ tr:hover td{background:var(--surface2)}
 .concern-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:6px}
 .concern-bar-fill{height:100%;border-radius:3px;background:var(--accent)}
 #debug-panel{display:none;background:#1a1714;color:#f4f2ee;border-radius:8px;padding:20px;margin-bottom:28px;font-family:monospace;font-size:11px}
-/* API Key modal */
 .apikey-input{width:100%;font-family:var(--mono);font-size:12px;border:1px solid var(--border-strong);border-radius:6px;padding:8px 12px;background:var(--surface2);color:var(--text);outline:none;margin:12px 0}
 .apikey-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-light)}
 ::-webkit-scrollbar{width:6px;height:6px}
@@ -153,7 +156,14 @@ tr:hover td{background:var(--surface2)}
     <button class="btn btn-primary btn-sm" onclick="openShareModal()">Share</button>
   </div>
 </div>
+<div class="tab-bar">
+  <button class="tab-btn active" id="tab-dashboard" onclick="switchTab('dashboard')">Dashboard</button>
+  <button class="tab-btn" id="tab-files" onclick="switchTab('files')">Files</button>
+</div>
 <div class="main">
+
+  <!-- DASHBOARD PANEL -->
+  <div id="dashboard-panel">
   <div id="debug-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
       <span style="font-size:13px;font-weight:600">PDF Parser Debug</span>
@@ -238,6 +248,35 @@ tr:hover td{background:var(--surface2)}
   </div>
   <div class="section-header"><div><div class="section-title">Issue Narratives &amp; Action Items</div><div class="section-sub" id="narrative-count-label">0 issues across 0 reports</div></div></div>
   <div class="narrative-section" id="narratives-container"><div class="empty-state"><div class="icon">&#128221;</div><p>No narrative issues extracted</p></div></div>
+  </div><!-- end dashboard-panel -->
+
+  <!-- FILES PANEL -->
+  <div id="files-panel" style="display:none">
+    <div class="filter-bar">
+      <span class="filter-label">Filter</span>
+      <select id="files-filter-country" onchange="renderFilesTable()"><option value="">All Countries</option></select>
+      <select id="files-filter-com" onchange="renderFilesTable()"><option value="">All COMs</option></select>
+      <select id="files-filter-pi" onchange="renderFilesTable()"><option value="">All PIs</option></select>
+      <button class="btn btn-outline btn-sm" onclick="resetFilesFilters()">&#10005; Reset</button>
+      <span class="filter-label" style="margin-left:auto" id="files-count-label">0 files</span>
+    </div>
+    <div class="table-wrapper">
+      <table>
+        <thead><tr>
+          <th>File Name</th>
+          <th>Site</th>
+          <th>Country</th>
+          <th>PI</th>
+          <th>COM</th>
+          <th>Visit Start</th>
+          <th>Visit End</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="files-tbody"><tr><td colspan="8" class="empty-state" style="padding:48px"><div class="icon">&#128193;</div><p>No files loaded</p></td></tr></tbody>
+      </table>
+    </div>
+  </div><!-- end files-panel -->
+
 </div>
 
 <!-- Share modal -->
@@ -311,6 +350,57 @@ async function loadFromSupabase(id){
   var res=await _supabase.from('sessions').select('reports').eq('id',id).single();
   if(res.error)throw new Error(res.error.message);
   return res.data.reports;
+}
+
+function switchTab(tab){
+  document.getElementById('dashboard-panel').style.display=tab==='dashboard'?'':'none';
+  document.getElementById('files-panel').style.display=tab==='files'?'':'none';
+  document.getElementById('tab-dashboard').className='tab-btn'+(tab==='dashboard'?' active':'');
+  document.getElementById('tab-files').className='tab-btn'+(tab==='files'?' active':'');
+}
+
+function resetFilesFilters(){
+  ['files-filter-country','files-filter-com','files-filter-pi'].forEach(function(id){document.getElementById(id).value=''});
+  renderFilesTable();
+}
+
+function renderFilesTable(){
+  var country=document.getElementById('files-filter-country').value;
+  var com=document.getElementById('files-filter-com').value;
+  var pi=document.getElementById('files-filter-pi').value;
+  var filtered=allReports.filter(function(r){
+    if(country&&r.country!==country)return false;
+    if(com&&r.author!==com)return false;
+    if(pi&&r.pi!==pi)return false;
+    return true;
+  });
+  document.getElementById('files-count-label').textContent=filtered.length+' file'+(filtered.length!==1?'s':'');
+  var tbody=document.getElementById('files-tbody');
+  if(!filtered.length){tbody.innerHTML='<tr><td colspan="8" class="empty-state" style="padding:48px"><div class="icon">&#128193;</div><p>No files loaded</p></td></tr>';return}
+  tbody.innerHTML=filtered.map(function(r){
+    var ri=allReports.indexOf(r);
+    var start=r.visitDateStart||r.visitDate||'--';
+    var end=r.visitDateEnd||r.visitDate||'--';
+    return'<tr>'+
+      '<td style="font-family:var(--mono);font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.fileName)+'">'+esc(r.fileName)+'</td>'+
+      '<td>'+esc(r.site||'--')+'</td>'+
+      '<td>'+esc(r.country||'--')+'</td>'+
+      '<td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.pi||'')+'">'+esc(r.pi||'--')+'</td>'+
+      '<td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(r.author||'')+'">'+esc(r.author||'--')+'</td>'+
+      '<td style="font-family:var(--mono);font-size:11px">'+esc(start)+'</td>'+
+      '<td style="font-family:var(--mono);font-size:11px">'+esc(end)+'</td>'+
+      '<td><button class="btn btn-danger btn-sm" onclick="deleteReport('+ri+')">Delete</button></td>'+
+    '</tr>';
+  }).join('');
+}
+
+function deleteReport(idx){
+  var r=allReports[idx];
+  if(!r||!confirm('Remove "'+r.fileName+'"?'))return;
+  allReports.splice(idx,1);
+  saveData();
+  refreshDashboard();
+  showToast('Report removed');
 }
 
 pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
@@ -410,6 +500,23 @@ function extractBetweenLabels(text,startPat,endPat){
   var raw=em?after.slice(0,em.index):after.slice(0,120);
   return raw.trim().replace(/\s+/g,' ');
 }
+
+function extractVisitDateRange(text){
+  var m=text.match(/Date\s*\(s\)\s+of\s+the\s+vi\s*si\s*t\s*:\s*(.+?)(?=This\s+document|Page\s+\d|Investigational\s+Medicinal|\n\n|$)/i);
+  if(!m)return{start:'',end:''};
+  var raw=m[1].trim().replace(/\s{2,}/g,' ');
+  // "April 1 - 2, 2026" or "April 1-2, 2026"
+  var r1=raw.match(/([A-Za-z]+)\s+(\d{1,2})\s*[-–]\s*(\d{1,2})\s*,?\s*(\d{4})/);
+  if(r1){var s=tryParseDate(r1[1]+' '+r1[2]+' '+r1[4]),e=tryParseDate(r1[1]+' '+r1[3]+' '+r1[4]);return{start:s?s.toISOString().split('T')[0]:'',end:e?e.toISOString().split('T')[0]:''};}
+  // "April 1 - May 3, 2026"
+  var r2=raw.match(/([A-Za-z]+\s+\d{1,2})\s*[-–]\s*([A-Za-z]+\s+\d{1,2})\s*,?\s*(\d{4})/);
+  if(r2){var s2=tryParseDate(r2[1]+' '+r2[3]),e2=tryParseDate(r2[2]+' '+r2[3]);return{start:s2?s2.toISOString().split('T')[0]:'',end:e2?e2.toISOString().split('T')[0]:''};}
+  // Single date
+  var clean=raw.replace(/([A-Za-z]+\s+\d{1,2})\s*[-–]\s*\d{1,2}\s*,?\s*(\d{4})/,'$1 $2').replace(/\s*,\s*/g,' ').trim();
+  var d=tryParseDate(clean);var iso=d?d.toISOString().split('T')[0]:'';
+  return{start:iso,end:iso};
+}
+
 function extractVisitDate(text){
   var m=text.match(/Date\s*\(s\)\s+of\s+the\s+vi\s*si\s*t\s*:\s*(.+?)(?=This\s+document|Page\s+\d|Investigational\s+Medicinal|\n\n|$)/i);
   if(!m)return'';
@@ -478,7 +585,10 @@ async function parsePDF(file){
   r.site=tf('sitenumber')||tf('site')||extract(fullText,/Site\s+Number\s*:\s*(\S+)/i)||'';
   r.country=tf('country')||extractBetweenLabels(fullText,'Country\\s*:','Principal\\s+Investigator')||'';
   r.pi=tf('principalinvestigator')||tf('pi')||extractBetweenLabels(fullText,'Principal\\s+Investigator\\s*:','Date')||'';
-  r.visitDate=tf('visitdate')||extractVisitDate(fullText);
+  var vdr=extractVisitDateRange(fullText);
+  r.visitDate=tf('visitdate')||vdr.start;
+  r.visitDateStart=vdr.start;
+  r.visitDateEnd=vdr.end;
   r.sigDate=tf('signaturedate')||extractSigDate(fullText);
   r.sigLag=calcLag(r.visitDate,r.sigDate);
   r.author=tf('reportauthorname')||extractBetweenLabels(fullText,'Report\\s+Author\\s+Name','Reviewer')||'';
@@ -554,12 +664,21 @@ function refreshDashboard(){
   var countries=[...new Set(allReports.map(function(r){return r.country}).filter(Boolean))].sort();
   var sites=[...new Set(allReports.map(function(r){return r.site}).filter(Boolean))].sort();
   var pis=[...new Set(allReports.map(function(r){return r.pi}).filter(Boolean))].sort();
+  var coms=[...new Set(allReports.map(function(r){return r.author}).filter(Boolean))].sort();
   var cSel=document.getElementById('filter-country'),curC=cSel.value;
   cSel.innerHTML='<option value="">All Countries</option>'+countries.map(function(c){return'<option value="'+esc(c)+'">'+esc(c)+'</option>'}).join('');cSel.value=curC;
   var sSel=document.getElementById('filter-site'),curS=sSel.value;
   sSel.innerHTML='<option value="">All Sites</option>'+sites.map(function(s){return'<option value="'+esc(s)+'">'+esc(s)+'</option>'}).join('');sSel.value=curS;
   var pSel=document.getElementById('filter-pi'),curP=pSel.value;
   pSel.innerHTML='<option value="">All PIs</option>'+pis.map(function(p){return'<option value="'+esc(p)+'">'+esc(p)+'</option>'}).join('');pSel.value=curP;
+  // Files tab filters
+  var fcSel=document.getElementById('files-filter-country'),fcCur=fcSel.value;
+  fcSel.innerHTML='<option value="">All Countries</option>'+countries.map(function(c){return'<option value="'+esc(c)+'">'+esc(c)+'</option>'}).join('');fcSel.value=fcCur;
+  var fcomSel=document.getElementById('files-filter-com'),fcomCur=fcomSel.value;
+  fcomSel.innerHTML='<option value="">All COMs</option>'+coms.map(function(c){return'<option value="'+esc(c)+'">'+esc(c)+'</option>'}).join('');fcomSel.value=fcomCur;
+  var fpiSel=document.getElementById('files-filter-pi'),fpiCur=fpiSel.value;
+  fpiSel.innerHTML='<option value="">All PIs</option>'+pis.map(function(p){return'<option value="'+esc(p)+'">'+esc(p)+'</option>'}).join('');fpiSel.value=fpiCur;
+  renderFilesTable();
   applyFilters();
 }
 
@@ -647,7 +766,7 @@ function sortTable(col){if(sortCol===col)sortAsc=!sortAsc;else{sortCol=col;sortA
 function openDetail(idx){
   var r=allReports[idx];
   var ansRows=QUESTIONS.map(function(q){var a=r.answers[q.id]||'NR';var cls=a==='Yes'?'pill-green':a==='No'?'pill-red':a==='N/A'?'pill-grey':'pill-amber';return'<div class="q-answer-row"><div class="q-answer-num">Q'+q.id+'</div><div class="q-answer-text">'+q.text+'</div><span class="pill '+cls+'" style="flex-shrink:0">'+a+'</span></div>'}).join('');
-  document.getElementById('detail-content').innerHTML='<h2 style="font-family:var(--serif);font-size:22px;font-weight:400;margin-bottom:4px">'+esc(r.protocol||'Report')+' &middot; '+esc(r.site||'Site')+'</h2><p style="color:var(--text-muted);font-size:12px;font-family:var(--mono);margin-bottom:16px">'+esc(r.fileName)+'</p><div class="detail-grid"><div class="detail-item"><label>Country</label><span>'+esc(r.country||'--')+'</span></div><div class="detail-item"><label>PI</label><span>'+esc(r.pi||'--')+'</span></div><div class="detail-item"><label>Visit Date</label><span>'+esc(r.visitDate||'--')+'</span></div><div class="detail-item"><label>Sig Date</label><span>'+esc(r.sigDate||'--')+'</span></div><div class="detail-item"><label>Finalization Lag</label><span>'+(r.sigLag!==null?r.sigLag+'d':'--')+'</span></div><div class="detail-item"><label>IMP Risk</label><span>'+esc(r.impRisk||'--')+'</span></div><div class="detail-item"><label>EP Risk</label><span>'+esc(r.epRisk||'--')+'</span></div><div class="detail-item" style="grid-column:1/-1"><label>Triggers</label><span>'+(r.triggers.length?r.triggers.join(', '):'--')+'</span></div></div><div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px">Question Responses</div><div class="q-answers-list">'+ansRows+'</div>'+(r.narratives&&r.narratives.length?'<div style="margin:16px 0 8px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">Issues ('+r.narratives.length+')</div>'+r.narratives.map(function(n){return'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;font-size:12px"><strong>#'+esc(n.num)+'</strong> '+esc(n.description)+(n.action?'<br><span style="color:var(--text-muted)">Action: '+esc(n.action)+'</span>':'')+'</div>'}).join(''):'');
+  document.getElementById('detail-content').innerHTML='<h2 style="font-family:var(--serif);font-size:22px;font-weight:400;margin-bottom:4px">'+esc(r.protocol||'Report')+' &middot; '+esc(r.site||'Site')+'</h2><p style="color:var(--text-muted);font-size:12px;font-family:var(--mono);margin-bottom:16px">'+esc(r.fileName)+'</p><div class="detail-grid"><div class="detail-item"><label>Country</label><span>'+esc(r.country||'--')+'</span></div><div class="detail-item"><label>PI</label><span>'+esc(r.pi||'--')+'</span></div><div class="detail-item"><label>Visit Start</label><span>'+esc(r.visitDateStart||r.visitDate||'--')+'</span></div><div class="detail-item"><label>Visit End</label><span>'+esc(r.visitDateEnd||r.visitDate||'--')+'</span></div><div class="detail-item"><label>Sig Date</label><span>'+esc(r.sigDate||'--')+'</span></div><div class="detail-item"><label>Finalization Lag</label><span>'+(r.sigLag!==null?r.sigLag+'d':'--')+'</span></div><div class="detail-item"><label>IMP Risk</label><span>'+esc(r.impRisk||'--')+'</span></div><div class="detail-item"><label>EP Risk</label><span>'+esc(r.epRisk||'--')+'</span></div><div class="detail-item"><label>COM (Author)</label><span>'+esc(r.author||'--')+'</span></div><div class="detail-item" style="grid-column:1/-1"><label>Triggers</label><span>'+(r.triggers.length?r.triggers.join(', '):'--')+'</span></div></div><div style="font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted);margin-bottom:8px">Question Responses</div><div class="q-answers-list">'+ansRows+'</div>'+(r.narratives&&r.narratives.length?'<div style="margin:16px 0 8px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-muted)">Issues ('+r.narratives.length+')</div>'+r.narratives.map(function(n){return'<div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin-bottom:6px;font-size:12px"><strong>#'+esc(n.num)+'</strong> '+esc(n.description)+(n.action?'<br><span style="color:var(--text-muted)">Action: '+esc(n.action)+'</span>':'')+'</div>'}).join(''):'');
   document.getElementById('delete-visit-btn').onclick=function(){if(!confirm('Remove this report?'))return;allReports.splice(idx,1);saveData();closeModal('detail-modal');refreshDashboard();showToast('Report removed')};
   document.getElementById('detail-modal').classList.add('open');
 }
@@ -676,8 +795,8 @@ document.querySelectorAll('.modal-overlay').forEach(function(el){el.addEventList
 function downloadCSV(){
   if(!filteredReports.length){showToast('No data to export',true);return}
   var qH=QUESTIONS.map(function(q){return'Q'+q.id+'_'+q.short.replace(/[,\s]/g,'_')});
-  var headers=['Protocol','Site','Country','PI','Visit_Date','Sig_Date','Sig_Lag_Days','Triggers','IMP_Risk_Q12','EP_Risk_Q13','Issue_Count','Author','Reviewer','File_Name'].concat(qH);
-  var rows=filteredReports.map(function(r){return[r.protocol,r.site,r.country,r.pi,r.visitDate,r.sigDate,r.sigLag!=null?r.sigLag:'',r.triggers.join('; '),r.impRisk,r.epRisk,r.narratives?r.narratives.length:0,r.author,r.reviewer,r.fileName].concat(QUESTIONS.map(function(q){return r.answers[q.id]||'NR'}))});
+  var headers=['Protocol','Site','Country','PI','Visit_Start','Visit_End','Sig_Date','Sig_Lag_Days','Triggers','IMP_Risk_Q12','EP_Risk_Q13','Issue_Count','COM_Author','Reviewer','File_Name'].concat(qH);
+  var rows=filteredReports.map(function(r){return[r.protocol,r.site,r.country,r.pi,r.visitDateStart||r.visitDate,r.visitDateEnd||r.visitDate,r.sigDate,r.sigLag!=null?r.sigLag:'',r.triggers.join('; '),r.impRisk,r.epRisk,r.narratives?r.narratives.length:0,r.author,r.reviewer,r.fileName].concat(QUESTIONS.map(function(q){return r.answers[q.id]||'NR'}))});
   var csv=[headers].concat(rows).map(function(row){return row.map(function(v){return'"'+String(v!=null?v:'').replace(/"/g,'""')+'"'}).join(',')}).join('\n');
   var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='MOV_Reports_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
   showToast('CSV downloaded');
@@ -719,7 +838,7 @@ async function runThemeAnalysis(){
 function showDebug(){
   if(!allReports.length){showToast('Upload a report first',true);return}
   var r=allReports[0],out='=== PARSED FIELDS ===\n';
-  ['protocol','site','country','pi','visitDate','sigDate','triggers','impRisk','epRisk'].forEach(function(k){out+=k+': '+JSON.stringify(r[k])+'\n'});
+  ['protocol','site','country','pi','visitDate','visitDateStart','visitDateEnd','sigDate','triggers','impRisk','epRisk','author'].forEach(function(k){out+=k+': '+JSON.stringify(r[k])+'\n'});
   out+='\n=== ANSWERS ===\n';
   for(var i=1;i<=13;i++){var block=carveBlock(r.rawText||'',i);out+='Q'+i+': '+r.answers[i]+'  |  block: '+JSON.stringify(block.slice(0,300).replace(/\n/g,'|'))+'\n'}
   out+='\n=== RAW TEXT (first 1500 chars) ===\n';
